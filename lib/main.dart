@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'models/air_quality.dart';
 import 'services/air_quality_service.dart';
+import 'services/location_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -36,9 +39,12 @@ class AirQualityScreen extends StatefulWidget {
 
 class _AirQualityScreenState extends State<AirQualityScreen>
     with TickerProviderStateMixin {
-  final AirQualityService _service = AirQualityService();
+  final AirQualityService _airQualityService = AirQualityService();
+  final LocationService _locationService = LocationService();
   AirQuality? _airQuality;
   bool _isLoading = true;
+  String? _errorMessage;
+  Position? _currentPosition;
   late AnimationController _pulseController;
   late AnimationController _fadeController;
   late Animation<double> _pulseAnimation;
@@ -73,10 +79,53 @@ class _AirQualityScreenState extends State<AirQualityScreen>
   Future<void> _loadAirQuality() async {
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
-      final airQuality = await _service.getSampleAirQuality();
+      // 위치 가져오기
+      final position = await _locationService.getCurrentPosition();
+
+      if (position == null) {
+        // 위치 권한이 거부된 경우
+        final isPermanentlyDenied = await _locationService
+            .isPermissionPermanentlyDenied();
+        setState(() {
+          _isLoading = false;
+          _errorMessage = isPermanentlyDenied
+              ? '위치 권한이 거부되었습니다.\n설정에서 위치 권한을 허용해주세요.'
+              : '위치 정보를 가져올 수 없습니다.\n위치 권한을 허용해주세요.';
+        });
+
+        if (mounted && isPermanentlyDenied) {
+          _showPermissionDialog();
+        }
+        return;
+      }
+
+      _currentPosition = position;
+
+      // API 키는 여기에 설정하세요
+      // 한국 공공데이터포털 API 키: https://www.data.go.kr 에서 발급
+      // 1. 공공데이터포털 회원가입 및 로그인
+      // 2. "실시간 대기질 정보 조회 서비스" 검색
+      // 3. 활용신청 후 인증키 발급
+      // ⚠️ 중요: "일반 인증키 (Decoding)"을 복사해서 넣으세요!
+      // Encoding이 아닌 Decoding된 키를 사용해야 합니다.
+      const String? koreaDataApiKey =
+          'qB/mPTTOzHKJtX5QHVm9MnI9hf7ek1EwYgFK6WrAXBXlkVy5df1qh/E0mlPRT/PW0Hhd80Gt2xwWQwKpaPGVYg=='; // 여기에 Decoding된 인증키 입력 (예: 'qB/mPTTOzHKJtX5QHVm9MnI9hf7ek1EwYgFK6WrAXBXlkVy5df1qh/E0mlPRT/PW0Hhd80Gt2xwWQwKpaPGVYg==')
+
+      // OpenWeatherMap API 키 (백업용, 선택사항)
+      const String? openWeatherApiKey = null;
+
+      // 위치 기반으로 대기질 정보 가져오기
+      final airQuality = await _airQualityService.getAirQualityByLocation(
+        position.latitude,
+        position.longitude,
+        koreaDataApiKey: koreaDataApiKey,
+        openWeatherApiKey: openWeatherApiKey,
+      );
+
       setState(() {
         _airQuality = airQuality;
         _isLoading = false;
@@ -84,13 +133,43 @@ class _AirQualityScreenState extends State<AirQualityScreen>
     } catch (e) {
       setState(() {
         _isLoading = false;
+        _errorMessage = '데이터를 불러오는 중 오류가 발생했습니다: $e';
       });
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('데이터를 불러오는 중 오류가 발생했습니다: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_errorMessage ?? '알 수 없는 오류가 발생했습니다'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
+  }
+
+  void _showPermissionDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('위치 권한 필요'),
+        content: const Text(
+          '정확한 미세먼지 정보를 제공하기 위해 위치 권한이 필요합니다.\n'
+          '설정에서 위치 권한을 허용해주세요.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await openAppSettings();
+            },
+            child: const Text('설정 열기'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -120,6 +199,43 @@ class _AirQualityScreenState extends State<AirQualityScreen>
         child: SafeArea(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
+              : _errorMessage != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: Colors.red.shade300,
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          _errorMessage!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        ElevatedButton.icon(
+                          onPressed: _loadAirQuality,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('다시 시도'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
               : _airQuality == null
               ? const Center(child: Text('데이터를 불러올 수 없습니다'))
               : FadeTransition(
@@ -155,23 +271,48 @@ class _AirQualityScreenState extends State<AirQualityScreen>
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '미세먼지 현황',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade800,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '미세먼지 현황',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
+                ),
               ),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              _airQuality?.stationName ?? '',
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-            ),
-          ],
+              const SizedBox(height: 5),
+              Row(
+                children: [
+                  Icon(
+                    Icons.location_on,
+                    size: 16,
+                    color: Colors.grey.shade600,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      _airQuality?.stationName ?? '위치 정보 없음',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey.shade600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              if (_currentPosition != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '${_currentPosition!.latitude.toStringAsFixed(4)}, ${_currentPosition!.longitude.toStringAsFixed(4)}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+              ],
+            ],
+          ),
         ),
         IconButton(
           icon: const Icon(Icons.refresh, size: 28),
