@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'models/air_quality.dart';
 import 'services/air_quality_service.dart';
 import 'services/location_service.dart';
+import 'services/address_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -41,10 +42,12 @@ class _AirQualityScreenState extends State<AirQualityScreen>
     with TickerProviderStateMixin {
   final AirQualityService _airQualityService = AirQualityService();
   final LocationService _locationService = LocationService();
+  final AddressService _addressService = AddressService();
   AirQuality? _airQuality;
   bool _isLoading = true;
   String? _errorMessage;
   Position? _currentPosition;
+  String? _currentAddress;
   late AnimationController _pulseController;
   late AnimationController _fadeController;
   late Animation<double> _pulseAnimation;
@@ -104,6 +107,22 @@ class _AirQualityScreenState extends State<AirQualityScreen>
       }
 
       _currentPosition = position;
+
+      // 주소 가져오기
+      try {
+        final address = await _addressService.getAddressFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
+        setState(() {
+          _currentAddress = address;
+        });
+      } catch (e) {
+        print('주소 가져오기 오류: $e');
+        setState(() {
+          _currentAddress = null;
+        });
+      }
 
       // API 키는 여기에 설정하세요
       // 한국 공공데이터포털 API 키: https://www.data.go.kr 에서 발급
@@ -304,7 +323,22 @@ class _AirQualityScreenState extends State<AirQualityScreen>
                   ),
                 ],
               ),
-              if (_currentPosition != null) ...[
+              if (_currentAddress != null && _currentAddress != '주소 정보 없음') ...[
+                const SizedBox(height: 4),
+                Text(
+                  _currentAddress!,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+              ] else if (_airQuality?.stationName != null &&
+                  _airQuality!.stationName.isNotEmpty &&
+                  _airQuality!.stationName != '위치 정보 없음') ...[
+                // 주소가 없으면 측정소 이름을 주소 형식으로 표시
+                const SizedBox(height: 4),
+                Text(
+                  _airQuality!.stationName,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+              ] else if (_currentPosition != null) ...[
                 const SizedBox(height: 4),
                 Text(
                   '${_currentPosition!.latitude.toStringAsFixed(4)}, ${_currentPosition!.longitude.toStringAsFixed(4)}',
