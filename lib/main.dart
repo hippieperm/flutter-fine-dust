@@ -49,7 +49,7 @@ class _AirQualityScreenState extends State<AirQualityScreen>
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: const Duration(seconds: 4),
     )..repeat(reverse: true);
 
     _fadeController = AnimationController(
@@ -57,13 +57,14 @@ class _AirQualityScreenState extends State<AirQualityScreen>
       duration: const Duration(milliseconds: 800),
     );
 
-    _pulseAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+    _pulseAnimation = Tween<double>(begin: 0.97, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeIn),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeIn));
 
     _fadeController.forward();
     _loadAirQuality();
@@ -85,9 +86,9 @@ class _AirQualityScreenState extends State<AirQualityScreen>
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('데이터를 불러오는 중 오류가 발생했습니다: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('데이터를 불러오는 중 오류가 발생했습니다: $e')));
       }
     }
   }
@@ -113,46 +114,38 @@ class _AirQualityScreenState extends State<AirQualityScreen>
                     Color(_airQuality!.statusColor).withOpacity(0.4),
                     Colors.white,
                   ]
-                : [
-                    Colors.blue.shade300,
-                    Colors.blue.shade100,
-                    Colors.white,
-                  ],
+                : [Colors.blue.shade300, Colors.blue.shade100, Colors.white],
           ),
         ),
         child: SafeArea(
           child: _isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(),
-                )
+              ? const Center(child: CircularProgressIndicator())
               : _airQuality == null
-                  ? const Center(
-                      child: Text('데이터를 불러올 수 없습니다'),
-                    )
-                  : FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: RefreshIndicator(
-                        onRefresh: _loadAirQuality,
-                        child: SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          child: Padding(
-                            padding: const EdgeInsets.all(20.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildHeader(),
-                                const SizedBox(height: 30),
-                                _buildMainCard(),
-                                const SizedBox(height: 20),
-                                _buildDetailCards(),
-                                const SizedBox(height: 20),
-                                _buildInfoCard(),
-                              ],
-                            ),
-                          ),
+              ? const Center(child: Text('데이터를 불러올 수 없습니다'))
+              : FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: RefreshIndicator(
+                    onRefresh: _loadAirQuality,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildHeader(),
+                            const SizedBox(height: 30),
+                            _buildMainCard(),
+                            const SizedBox(height: 20),
+                            _buildDetailCards(),
+                            const SizedBox(height: 20),
+                            _buildInfoCard(),
+                          ],
                         ),
                       ),
                     ),
+                  ),
+                ),
         ),
       ),
     );
@@ -176,10 +169,7 @@ class _AirQualityScreenState extends State<AirQualityScreen>
             const SizedBox(height: 5),
             Text(
               _airQuality?.stationName ?? '',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
             ),
           ],
         ),
@@ -351,10 +341,7 @@ class _AirQualityScreenState extends State<AirQualityScreen>
                   padding: const EdgeInsets.only(bottom: 5),
                   child: Text(
                     unit,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade500,
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
                   ),
                 ),
               ],
@@ -409,10 +396,7 @@ class _AirQualityScreenState extends State<AirQualityScreen>
           const SizedBox(height: 12),
           Text(
             DateFormat('yyyy년 MM월 dd일 HH:mm').format(_airQuality!.dateTime),
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey.shade700,
-            ),
+            style: TextStyle(fontSize: 18, color: Colors.grey.shade700),
           ),
           const SizedBox(height: 20),
           Divider(color: Colors.grey.shade300),
